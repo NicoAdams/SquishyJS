@@ -26,17 +26,6 @@ Point.prototype.applyForce = function(fVec) {
   this.acc.add(fVec.scale(1/this.mass))
 }
 
-// Defines a force relation between two points
-// f: A function with signature (p1, p2) -> vector2 [force on p1]
-Force = function(f) {
-  this.f = f
-  
-  this.apply = function(p1, p2) {
-    p1.applyForce(this.f(p1, p2))
-    p2.applyForce(this.f(p2, p1))
-  }
-}
-
 // Spring force with eq distance eq and spring force k
 springForce = function(eq, k) {
   forceFunc = function(point1, point2) {
@@ -49,7 +38,7 @@ springForce = function(eq, k) {
     
     return force
   }
-  return new Force(forceFunc)
+  return forceFunc
 }
 
 // Replusion force given by strength * r^n
@@ -61,7 +50,7 @@ radialPowerForce = function(strength, n) {
     r = currDist.length()
     return currDist.norm().scale(strength * Math.pow(r, n))
   }
-  return new Force(forceFunc)
+  return forceFunc
 }
 
 // Damping force
@@ -79,7 +68,7 @@ dampingForce = function(damping) {
     }
     return force
   }
-  return new Force(forceFunc)
+  return forceFunc
 }
 
 
@@ -182,20 +171,31 @@ Ball.prototype.pointAt = function(index) {
   return this.points[index]
 }
 
-// Applies a force f stored as {p1Index, p2Index, forceObject}
-Ball.prototype.applyForce = function(f) {
-  
-  point1 = this.pointAt(f.index1)
-  point2 = this.pointAt(f.index2)
-  
-  f.force.apply(this.pointAt(f.index1), this.pointAt(f.index2))
+// Applies a force on all points from an outside source
+Ball.prototype.applyExternalForce = function(f) {
+  this.centerPoint.applyForce(f(this.centerPoint))
+  for(var i=0; i<this.points.length; i++) {
+    currPoint = this.points[i]
+    currPoint.applyForce(f(currPoint))
+  }
+}
+
+// Applies a force function between two points stored as {p1Index, p2Index, forceObject}
+Ball.prototype.applyInternalForce = function(f, point1, point2) {
+  point1.applyForce(f(point1, point2))
+  point2.applyForce(f(point2, point1))
 }
 
 // Updates the ball
 Ball.prototype.update = function(dt) {
   // Applies forces
   for(var i=0; i<this.forces.length; i++) {
-    this.applyForce(this.forces[i])
+    currForce = this.forces[i]
+    
+    forceFunc = currForce.force
+    point1 = this.pointAt(currForce.index1)
+    point2 = this.pointAt(currForce.index2)
+    this.applyInternalForce(forceFunc, point1, point2)
   }
   
   // Sets center point's position to the average edge position
@@ -220,12 +220,20 @@ Ball.prototype.update = function(dt) {
     this.centerPoint.vel = avgVel
   }
   
-  // Updates points
-  this.centerPoint.update(dt)
+  // Updates central point if dynamic
+  if(!(this.posAveraged || this.velAveraged)) {
+    this.centerPoint.update(dt)
+  }
+  
+  // Updates edge points
   for(var i=0; i<this.points.length; i++) {
     this.points[i].update(dt)
   }
 }
+
+// Defines a world: Stores balls, static object and ambient forces (ie gravity
+
+
 
 // -- Runs simulation -- 
 
