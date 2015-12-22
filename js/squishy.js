@@ -40,7 +40,7 @@ Force = function(p1, p2, f) {
 }
 
 // Spring force with eq distance eq and spring force k
-springForce = function(point1, point2, eq, k, damping) {
+springForce = function(point1, point2, eq, k) {
 	forceFunc = function(point1, point2) {
 		pos1 = point1.getPos(); pos2 = point2.getPos();
 		vel1 = point1.getVel(); vel2 = point2.getVel();
@@ -49,17 +49,7 @@ springForce = function(point1, point2, eq, k, damping) {
 		
 		// Force 
 		currDist = pos1.copy().sub(pos2)
-		force.add(currDist.scale(k*(eq-currDist.length())))
-		
-		// Damping
-		
-		currVel = vel1.copy().sub(vel2)
-		if(currVel.length() != 0) {
-			currVelParallel = currVel.copy().project(currDist)
-			dampingForce = currVelParallel.scale(-damping)
-			force.add(dampingForce)
-		}
-		return force
+		return currDist.scale(k*(eq-currDist.length()))
 	}
 	return new Force(point1, point2, forceFunc)
 }
@@ -76,6 +66,22 @@ radialPowerForce = function(point1, point2, strength, n) {
 	return new Force(point1, point2, forceFunc)
 }
 
+// Damping force
+dampingForce = function(point1, point2, damping) {
+	forceFunc = function(point1, point2) {
+		currVel = vel1.copy().sub(vel2)
+		force = zeroVector2()
+		if(currVel.length() != 0) {
+			currVelParallel = currVel.copy().project(currDist)
+			dampingForce = currVelParallel.scale(-damping)
+			force.add(dampingForce)
+		}
+		return force
+	}
+	return new Force(point1, point2, forceFunc)
+}
+
+
 // Defines a squishy ball
 // kEdge, kCenter are spring constants
 // dampEdge, dampCenter are spring damping factors
@@ -86,8 +92,9 @@ defaultBallParams = function() {
 		radius: 10,
 		numPoints: 20,
 		kEdge: 1,
-		dampEdge: 0,
-		centerRepulsionStrength: 10
+		centerRepulsionStrength: 1,
+		dampEdge: 1,
+		dampCenter: 1
 	}
 }
 
@@ -116,14 +123,36 @@ Ball = function(params) {
 		nextPoint = this.points[(i+1)%numPoints]
 		nextPos = nextPoint.getPos()
 		
-		// Edge force
+		// Edge forces
+		
 		eqDist = currPos.copy().sub(nextPos).length()
-		edgeForce = springForce(currPoint, nextPoint, eqDist, params.kEdge, params.dampEdge)
+		edgeForce = springForce(
+			currPoint,
+			nextPoint,
+			eqDist,
+			params.kEdge)
 		this.forces.push(edgeForce)
 		
-		// Center force
-		centerForce = radialPowerForce(currPoint, this.centerPoint, params.centerRepulsionStrength, -1)
+		edgeDampingForce = dampingForce(
+			currPoint,
+			nextPoint,
+			params.dampEdge)
+		this.forces.push(edgeDampingForce)
+		
+		// Center forces
+		
+		centerForce = radialPowerForce(
+			currPoint,
+			this.centerPoint,
+			params.centerRepulsionStrength,
+			-2)
 		this.forces.push(centerForce)
+		
+		centerDampingForce = dampingForce(
+			currPoint,
+			this.centerPoint,
+			params.dampCenter)
+		this.forces.push(centerDampingForce)
 	}
 }
 
@@ -142,8 +171,16 @@ Ball.prototype.update = function(dt) {
 		this.forces[i].apply()
 	}
 	
+	// Sets the center point to the average point
+	avgLoc = zeroVector2()
+	for(var i=0; i<this.points.length; i++) {
+		avgLoc.add(this.points[i].getPos())
+	}
+	avgLoc.scale(1/this.points.length)
+	this.centerPoint = new Point(avgLoc)
+	
 	// Updates points
-	this.centerPoint.update(dt)
+	// this.centerPoint.update(dt)
 	for(var i=0; i<this.points.length; i++) {
 		this.points[i].update(dt)
 	}
@@ -155,9 +192,9 @@ params.pos = zeroVector2()
 params.radius = 15
 params.numPoints = 30
 params.kEdge = 1
-params.kCenter = 0.25
-params.dampEdge = 0.
-params.dampCenter = 0.
+params.centerRepulsionStrength = 500
+params.dampEdge = 0
+params.dampCenter = 0
 b = new Ball(params)
 
 b.points[0].vel = new vector2([10,0])
@@ -190,7 +227,9 @@ function renderStep()
   viewport.clear()
   
   // Renders
-  drawBallMesh(b, "red", "green")
+  viewport.fillShape(b, "gray")
+  // viewport.drawShape(b, "white")
+  drawBallMesh(b, "white", "green")
   
   // Initiates the next frame
   window.requestAnimationFrame(renderStep);
