@@ -69,7 +69,7 @@ radialPowerForce = function(point1, point2, strength, n) {
 	forceFunc = function(point1, point2) {
 		pos1 = point1.getPos(); pos2 = point2.getPos();
 		
-		currDist = p1.copy().sub(p2)
+		currDist = pos1.copy().sub(pos2)
 		r = currDist.length()
 		return currDist.norm().scale(strength * Math.pow(r, n))
 	}
@@ -86,9 +86,8 @@ defaultBallParams = function() {
 		radius: 10,
 		numPoints: 20,
 		kEdge: 1,
-		kCenter: 1,
 		dampEdge: 0,
-		dampCenter: 0
+		centerRepulsionStrength: 10
 	}
 }
 
@@ -123,7 +122,7 @@ Ball = function(params) {
 		this.forces.push(edgeForce)
 		
 		// Center force
-		centerForce = springForce(currPoint, this.centerPoint, this.radius, params.kCenter, params.dampCenter)
+		centerForce = radialPowerForce(currPoint, this.centerPoint, params.centerRepulsionStrength, -1)
 		this.forces.push(centerForce)
 	}
 }
