@@ -19,6 +19,10 @@ Point.prototype.update = function(dt) {
   this.vel.add(this.acc.copy().scale(dt))
   this.pos.add(this.vel.copy().scale(dt))
   this.acc = zeroVector2()
+  
+  if(isNaN(this.pos.vals[0])) {
+    console.log("NaN found")
+  }
 }
 
 Point.prototype.applyForce = function(fVec) {
@@ -231,22 +235,77 @@ Ball.prototype.update = function(dt) {
   }
 }
 
+// -- Runs simulation -- 
+
 // Defines a world: Stores balls, static object and ambient forces (ie gravity
 
+world = {}
 
+// Stores all ball objects
+world.balls = []
 
-// -- Runs simulation -- 
+// Force function signature: Point -> vector2
+world.forceFunctions = []
+
+// Sets gravity and walls
+world.gravity = -0.2
+world.minY = -50
+
+world.forceFunctions.push(function(point) {
+  // Gravity force
+  return new vector2([0, world.gravity])
+})
+
+// This is not really a force function. Should I rename this concept?
+// Maybe "interaction function"
+world.forceFunctions.push(function(point) {
+  // Lower bound for y
+  if(point.pos.y() < world.minY) {
+    point.pos.vals[1] = world.minY
+    point.vel.vals[1] *= -1
+  }
+  return zeroVector2()
+})
+
+// Updates the world
+world.update = function(dt) {
+  for(var i=0; i<world.balls.length; i++) {
+    currBall = world.balls[i]
+    
+    // Applies external forces to each ball
+    for(var j=0; j<world.forceFunctions.length; j++) {
+      currForceFunc = world.forceFunctions[j]
+      currBall.applyExternalForce(currForceFunc)
+    }
+    
+    // Updates each ball
+    currBall.update(dt)
+  }
+}
+
+world.render = function() {
+  // Balls
+  for(var i=0; i<world.balls.length; i++) {
+    viewport.fillShape(world.balls[i], "gray")
+  }
+  
+  // Ground
+  bounds = viewport.gameBounds()
+  groundMin = new vector2([bounds[0].x(), world.minY])
+  groundMax = new vector2([bounds[1].x(), world.minY])
+  viewport.drawLine(groundMin, groundMax, "white")
+}
+
+// Adds balls to the world
 
 params = defaultBallParams()
 params.pos = zeroVector2()
 params.radius = 15
 params.numPoints = 25
 params.kEdge = 15
-params.kCenter = 5
-params.dampEdge = 0.2
-params.dampCenter = 0.2
-
-// Creates some test balls
+params.kCenter = 2
+params.dampEdge = 0.3
+params.dampCenter = 0.3
 
 params1 = copyObject(params)
 params1.pos = params.pos.copy()
@@ -255,22 +314,21 @@ params2.pos = params.pos.copy()
 params3 = copyObject(params)
 params3.pos = params.pos.copy()
 
-balls = []
 spacingVec = vector2FromPolar(2.5*params.radius, 0)
 
 params1.pos.sub(spacingVec)
 b1 = new Ball(params1)
-balls.push(b1)
+world.balls.push(b1)
 
 params2.posAveraged = true
 b2 = new Ball(params2)
-balls.push(b2)
+world.balls.push(b2)
 
 params3.posAveraged = true
 params3.velAveraged = true
 params3.pos.add(spacingVec)
 b3 = new Ball(params3)
-balls.push(b3)
+world.balls.push(b3)
 
 // Perturbs the test balls
 
@@ -278,8 +336,8 @@ function perturbBall(b) {
   b.points[0].vel = new vector2([10,0])
   b.points[Math.round(2)].vel = new vector2([-10,0])
 }
-for(var i=0; i<balls.length; i++) {
-  perturbBall(balls[i])
+for(var i=0; i<world.balls.length; i++) {
+  perturbBall(world.balls[i])
 }
 
 // Sets up the viewport
@@ -289,11 +347,8 @@ viewport.setZoom(5)
 // A single step of the physics
 dt = 0.05
 physicsStep = function() {
-  for(var i=0; i<balls.length; i++) {
-    balls[i].update(dt)
-  }
+  world.update(dt)
 }
-// timeStep = 10
 timeStep = 10
 setInterval(physicsStep, timeStep);
 
@@ -314,11 +369,7 @@ function renderStep()
   // Clears the canvas for new visuals
   viewport.clear()
   
-  // Renders
-  for(var i=0; i<balls.length; i++) {
-    viewport.fillShape(balls[i], "gray")
-    // drawBallMesh(balls[i], "white", "green")
-  }
+  world.render()
   
   // Initiates the next frame
   window.requestAnimationFrame(renderStep);

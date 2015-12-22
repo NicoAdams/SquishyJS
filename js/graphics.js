@@ -40,6 +40,24 @@ viewport.absToGame = function(absVec){
   return gameVec
 }
 
+// Returns vectors v(xMin, yMin), v(xMax, yMax) in game coords
+// Signature: [vMin, vMax]
+viewport.gameBounds = function() {
+  absMin = new vector2([0, 0])
+  absMax = new vector2([canvas.width, canvas.height])
+  gameMin = viewport.absToGame(absMin)
+  gameMax = viewport.absToGame(absMax)
+  return [gameMin, gameMax]
+}
+
+viewport.getShapeAbsPoints = function(s) {
+  points = s.getPoints()
+  for(var i=0; i<points.length; i++) {
+    points[i] = viewport.gameToAbs(points[i])
+  }
+  return points
+}
+
 viewport.clear = function(){
   canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
 }
@@ -86,14 +104,6 @@ viewport.drawLine = function(v1, v2, c){
   viewport.stroke(c);
 }
 
-viewport.getShapeAbsPoints = function(s) {
-  points = s.getPoints()
-  for(var i=0; i<points.length; i++) {
-    points[i] = viewport.gameToAbs(points[i])
-  }
-  return points
-}
- 
 viewport.drawShape = function(s, c){
   points = viewport.getShapeAbsPoints(s)
   l = points.length
