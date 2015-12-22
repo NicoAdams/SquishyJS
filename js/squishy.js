@@ -1,84 +1,85 @@
 // Defines a point
 
 Point = function(pos) {
-	this.pos = pos
-	this.vel = zeroVector2()
-	this.acc = zeroVector2()
-	this.mass = 1
+  this.pos = pos
+  this.vel = zeroVector2()
+  this.acc = zeroVector2()
+  this.mass = 1
 }
 
 Point.prototype.getPos = function(){
-	return this.pos.copy()
+  return this.pos.copy()
 }
 
 Point.prototype.getVel = function(){
-	return this.vel.copy()
+  return this.vel.copy()
 }
 
 Point.prototype.update = function(dt) {
-	this.vel.add(this.acc.copy().scale(dt))
-	this.pos.add(this.vel.copy().scale(dt))
-	this.acc = zeroVector2()
+  this.vel.add(this.acc.copy().scale(dt))
+  this.pos.add(this.vel.copy().scale(dt))
+  this.acc = zeroVector2()
 }
 
 Point.prototype.applyForce = function(fVec) {
-	fVec = fVec.copy()
-	this.acc.add(fVec.scale(1/this.mass))
+  fVec = fVec.copy()
+  this.acc.add(fVec.scale(1/this.mass))
 }
 
 // Defines a force relation between two points
 // f: A function with signature (p1, p2) -> vector2 [force on p1]
-Force = function(p1, p2, f) {
-	this.p1 = p1
-	this.p2 = p2
-	this.f = f
-	
-	this.apply = function() {
-		p1.applyForce(this.f(this.p1, this.p2))
-		p2.applyForce(this.f(this.p2, this.p1))
-	}
+Force = function(f) {
+  this.f = f
+  
+  this.apply = function(p1, p2) {
+    p1.applyForce(this.f(p1, p2))
+    p2.applyForce(this.f(p2, p1))
+  }
 }
 
 // Spring force with eq distance eq and spring force k
-springForce = function(point1, point2, eq, k) {
-	forceFunc = function(point1, point2) {
-		pos1 = point1.getPos(); pos2 = point2.getPos();
-		vel1 = point1.getVel(); vel2 = point2.getVel();
-		
-		force = zeroVector2()
-		
-		// Force 
-		currDist = pos1.copy().sub(pos2)
-		return currDist.scale(k*(eq-currDist.length()))
-	}
-	return new Force(point1, point2, forceFunc)
+springForce = function(eq, k) {
+  forceFunc = function(point1, point2) {
+    pos1 = point1.getPos(); pos2 = point2.getPos();
+    
+    currDist = pos1.copy().sub(pos2)
+    force = currDist.copy().norm()
+    
+    force.scale(k*(eq-currDist.length()))
+    
+    return force
+  }
+  return new Force(forceFunc)
 }
 
 // Replusion force given by strength * r^n
-radialPowerForce = function(point1, point2, strength, n) {
-	forceFunc = function(point1, point2) {
-		pos1 = point1.getPos(); pos2 = point2.getPos();
-		
-		currDist = pos1.copy().sub(pos2)
-		r = currDist.length()
-		return currDist.norm().scale(strength * Math.pow(r, n))
-	}
-	return new Force(point1, point2, forceFunc)
+radialPowerForce = function(strength, n) {
+  forceFunc = function(point1, point2) {
+    pos1 = point1.getPos(); pos2 = point2.getPos();
+    
+    currDist = pos1.copy().sub(pos2)
+    r = currDist.length()
+    return currDist.norm().scale(strength * Math.pow(r, n))
+  }
+  return new Force(forceFunc)
 }
 
 // Damping force
-dampingForce = function(point1, point2, damping) {
-	forceFunc = function(point1, point2) {
-		currVel = vel1.copy().sub(vel2)
-		force = zeroVector2()
-		if(currVel.length() != 0) {
-			currVelParallel = currVel.copy().project(currDist)
-			dampingForce = currVelParallel.scale(-damping)
-			force.add(dampingForce)
-		}
-		return force
-	}
-	return new Force(point1, point2, forceFunc)
+dampingForce = function(damping) {
+  forceFunc = function(point1, point2) {
+    vel1 = point1.getVel(); vel2 = point2.getVel();
+    
+    currVel = vel1.copy().sub(vel2)
+    force = zeroVector2()
+    
+    if(currVel.length() != 0) {
+      currVelParallel = currVel.copy().project(currDist)
+      dampingForce = currVelParallel.scale(-damping)
+      force.add(dampingForce)
+    }
+    return force
+  }
+  return new Force(forceFunc)
 }
 
 
@@ -87,137 +88,216 @@ dampingForce = function(point1, point2, damping) {
 // dampEdge, dampCenter are spring damping factors
 
 defaultBallParams = function() {
-	return {
-		pos: zeroVector2(),
-		radius: 10,
-		numPoints: 20,
-		kEdge: 1,
-		centerRepulsionStrength: 1,
-		dampEdge: 1,
-		dampCenter: 1
-	}
+  return {
+    pos: zeroVector2(),
+    radius: 10,
+    numPoints: 20,
+    kEdge: 1,
+    kCenter: 1,
+    dampEdge: 0,
+    dampCenter: 0,
+    posAveraged: false,
+    velAveraged: false
+  }
 }
 
 Ball = function(params) {
-	this.radius = params.radius
-	
-	numPoints = params.numPoints
-	
-	// Arranges the points in a circle
-	this.points = []
-	dAngle = Math.PI * 2 / numPoints
-	for(var i=0; i<numPoints; i++) {
-		angle = i*dAngle
-		point = new Point(vector2FromPolar(this.radius, angle).add(params.pos))
-		this.points.push(point)
-	}
-	
-	// The center repulsive point
-	this.centerPoint = new Point(params.pos)
-	
-	// Attaches spring forces to all points
-	this.forces = []
-	for(var i=0; i<numPoints; i++) {
-		currPoint = this.points[i]
-		currPos = currPoint.getPos()
-		nextPoint = this.points[(i+1)%numPoints]
-		nextPos = nextPoint.getPos()
-		
-		// Edge forces
-		
-		eqDist = currPos.copy().sub(nextPos).length()
-		edgeForce = springForce(
-			currPoint,
-			nextPoint,
-			eqDist,
-			params.kEdge)
-		this.forces.push(edgeForce)
-		
-		edgeDampingForce = dampingForce(
-			currPoint,
-			nextPoint,
-			params.dampEdge)
-		this.forces.push(edgeDampingForce)
-		
-		// Center forces
-		
-		centerForce = radialPowerForce(
-			currPoint,
-			this.centerPoint,
-			params.centerRepulsionStrength,
-			-2)
-		this.forces.push(centerForce)
-		
-		centerDampingForce = dampingForce(
-			currPoint,
-			this.centerPoint,
-			params.dampCenter)
-		this.forces.push(centerDampingForce)
-	}
+  // Stores relevant params
+  this.radius = params.radius
+  this.posAveraged = params.posAveraged
+  this.velAveraged = params.velAveraged
+  
+  numPoints = params.numPoints
+  
+  // Arranges the points in a circle
+  this.points = []
+  dAngle = Math.PI * 2 / numPoints
+  for(var i=0; i<numPoints; i++) {
+    angle = i*dAngle
+    point = new Point(vector2FromPolar(this.radius, angle).add(params.pos))
+    this.points.push(point)
+  }
+  
+  // The center repulsive point
+  this.centerPoint = new Point(params.pos.copy())
+  
+  // Assigns an index to the ball's center point
+  this.centerPointIndex = function() {return -1}
+  
+  // Adds a force connection to the ball
+  this.addForce = function(i1, i2, f) {
+    this.forces.push({
+      index1: i1,
+      index2: i2,
+      force: f
+    })
+  }
+  
+  // Attaches spring forces to all points
+  this.forces = []
+  for(var i=0; i<numPoints; i++) {
+    currIndex = i
+    nextIndex = (i+1)%numPoints
+    currPoint = this.points[currIndex]
+    currPos = currPoint.getPos()
+    nextPoint = this.points[nextIndex]
+    nextPos = nextPoint.getPos()
+    
+    // Edge forces
+    
+    eqDist = currPos.copy().sub(nextPos).length()
+    edgeForce = springForce(eqDist, params.kEdge)
+    this.addForce(currIndex, nextIndex, edgeForce)
+    
+    edgeDampingForce = dampingForce(params.dampEdge)
+    this.addForce(currIndex, nextIndex, edgeDampingForce)
+    
+    // Center forces
+    
+    centerForce = springForce(this.radius, params.kCenter)
+    this.addForce(currIndex, this.centerPointIndex(), centerForce)
+    
+    centerDampingForce = dampingForce(params.dampCenter)
+    this.addForce(currIndex, this.centerPointIndex(), centerDampingForce)
+  }
 }
 
+// Returns a list of all points
+// Points are copied
 Ball.prototype.getPoints = function(){
-	positions = []
-	for(var i=0; i<this.points.length; i++){
-		currPos = this.points[i].getPos()
-		positions.push(currPos)
-	}
-	return positions
+  positions = []
+  for(var i=0; i<this.points.length; i++){
+    currPos = this.points[i].getPos()
+    positions.push(currPos)
+  }
+  return positions
 }
 
+// Accesses points via index
+// Points are not copied
+Ball.prototype.pointAt = function(index) {
+  if(index == this.centerPointIndex()) {
+    return this.centerPoint
+  }
+  return this.points[index]
+}
+
+// Applies a force f stored as {p1Index, p2Index, forceObject}
+Ball.prototype.applyForce = function(f) {
+  
+  point1 = this.pointAt(f.index1)
+  point2 = this.pointAt(f.index2)
+  
+  f.force.apply(this.pointAt(f.index1), this.pointAt(f.index2))
+}
+
+// Updates the ball
 Ball.prototype.update = function(dt) {
-	// Applies forces
-	for(var i=0; i<this.forces.length; i++) {
-		this.forces[i].apply()
-	}
-	
-	// Sets the center point to the average point
-	avgLoc = zeroVector2()
-	for(var i=0; i<this.points.length; i++) {
-		avgLoc.add(this.points[i].getPos())
-	}
-	avgLoc.scale(1/this.points.length)
-	this.centerPoint = new Point(avgLoc)
-	
-	// Updates points
-	// this.centerPoint.update(dt)
-	for(var i=0; i<this.points.length; i++) {
-		this.points[i].update(dt)
-	}
+  // Applies forces
+  for(var i=0; i<this.forces.length; i++) {
+    this.applyForce(this.forces[i])
+  }
+  
+  // Sets center point's position to the average edge position
+  if(this.posAveraged) {
+    avgPos = zeroVector2()
+    for(var i=0; i<this.points.length; i++) {
+      avgPos.add(this.points[i].getPos())
+    }
+    avgPos.scale(1/this.points.length)
+    
+    this.centerPoint = new Point(avgPos)
+  }
+  
+  // Sets center point's velocity to the average edge velocity
+  if(this.velAveraged) {
+    avgVel = zeroVector2()
+    for(var i=0; i<this.points.length; i++) {
+      avgVel.add(this.points[i].getVel())
+    }
+    avgVel.scale(1/this.points.length)
+    
+    this.centerPoint.vel = avgVel
+  }
+  
+  // Updates points
+  this.centerPoint.update(dt)
+  for(var i=0; i<this.points.length; i++) {
+    this.points[i].update(dt)
+  }
 }
 
 // -- Runs simulation -- 
+
 params = defaultBallParams()
 params.pos = zeroVector2()
 params.radius = 15
-params.numPoints = 30
-params.kEdge = 1
-params.centerRepulsionStrength = 500
-params.dampEdge = 0
-params.dampCenter = 0
-b = new Ball(params)
+params.numPoints = 25
+params.kEdge = 15
+params.kCenter = 5
+params.dampEdge = 0.2
+params.dampCenter = 0.2
 
-b.points[0].vel = new vector2([10,0])
-b.points[2].vel = new vector2([-10,0])
+// Creates some test balls
 
-viewport.zoom = 5
+params1 = copyObject(params)
+params1.pos = params.pos.copy()
+params2 = copyObject(params)
+params2.pos = params.pos.copy()
+params3 = copyObject(params)
+params3.pos = params.pos.copy()
+
+balls = []
+spacingVec = vector2FromPolar(2.5*params.radius, 0)
+
+params1.pos.sub(spacingVec)
+b1 = new Ball(params1)
+balls.push(b1)
+
+params2.posAveraged = true
+b2 = new Ball(params2)
+balls.push(b2)
+
+params3.posAveraged = true
+params3.velAveraged = true
+params3.pos.add(spacingVec)
+b3 = new Ball(params3)
+balls.push(b3)
+
+// Perturbs the test balls
+
+function perturbBall(b) {
+  b.points[0].vel = new vector2([10,0])
+  b.points[Math.round(2)].vel = new vector2([-10,0])
+}
+for(var i=0; i<balls.length; i++) {
+  perturbBall(balls[i])
+}
+
+// Sets up the viewport
+
+viewport.setZoom(5)
 
 // A single step of the physics
 dt = 0.05
 physicsStep = function() {
-  b.update(dt)
+  for(var i=0; i<balls.length; i++) {
+    balls[i].update(dt)
+  }
 }
-setInterval(physicsStep, 10);
+// timeStep = 10
+timeStep = 10
+setInterval(physicsStep, timeStep);
 
 drawBallMesh = function(b, edgeColor, centerColor) {
-	l = b.points.length
-	for(var i=0; i<l; i++) {
-		currPoint = b.points[i]
-		nextPoint = b.points[(i+1)%l]
-		
-		viewport.drawLine(currPoint.getPos(), nextPoint.getPos(), edgeColor)
-		viewport.drawLine(currPoint.getPos(), b.centerPoint.getPos(), centerColor)
-	}
+  l = b.points.length
+  for(var i=0; i<l; i++) {
+    currPoint = b.points[i]
+    nextPoint = b.points[(i+1)%l]
+    
+    viewport.drawLine(currPoint.getPos(), nextPoint.getPos(), edgeColor)
+    viewport.drawLine(currPoint.getPos(), b.centerPoint.getPos(), centerColor)
+  }
 }
 
 // A single step of the animation
@@ -227,9 +307,10 @@ function renderStep()
   viewport.clear()
   
   // Renders
-  viewport.fillShape(b, "gray")
-  // viewport.drawShape(b, "white")
-  drawBallMesh(b, "white", "green")
+  for(var i=0; i<balls.length; i++) {
+    viewport.fillShape(balls[i], "gray")
+    // drawBallMesh(balls[i], "white", "green")
+  }
   
   // Initiates the next frame
   window.requestAnimationFrame(renderStep);

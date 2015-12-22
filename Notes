@@ -1,0 +1,13 @@
+Notes on the performance of the simulation
+
+-- EXPERIMENT: Finding stable parameters --
+
+Center averaged: The center point has zero velocity, and its position is taken as the average of all other points
+
+(1)
+kEdge = 10
+Undamped
+Center has 0 velocity and average position
+
+Stable for kCenter < 8
+

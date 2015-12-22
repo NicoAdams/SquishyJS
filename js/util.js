@@ -9,6 +9,10 @@ function smoothScale(n1, n2, ratio) {
 	return n2*ratio + n1*(1-ratio)
 }
 
+function copyObject(obj) {
+	return jQuery.extend({}, obj)
+}
+
 // -- Inheritance functions --
 
 function extend(parent, child) {
